@@ -3,6 +3,13 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.2] — 2026-05-03
+
+### Added
+- **Real auto-updates** via `electron-updater` + GitHub Releases. The app
+  checks for new releases on launch, downloads in the background, and
+  installs on quit. No more "open download page" round-trip.
+
 ## [1.3.1] — 2026-05-03
 
 ### Added

@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('api', {
   printToPdf: (suggestedName) => ipcRenderer.invoke('print:pdf', suggestedName),
   startDrag: (p) => ipcRenderer.send('start-drag', p),
   checkUpdates: () => ipcRenderer.invoke('updates:check'),
+  updatesState: () => ipcRenderer.invoke('updates:state'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  onUpdateState: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('updates:state', h); return () => ipcRenderer.removeListener('updates:state', h); },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   setLastFile: (info) => ipcRenderer.invoke('lastfile:set', info),
 });

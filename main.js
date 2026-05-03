@@ -171,7 +171,20 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(async () => {
+  createWindow();
+  try {
+    if (app.isPackaged) {
+      const s = await readSettings();
+      if (s.autoUpdateCheck !== false) {
+        wireAutoUpdater();
+        const { autoUpdater } = require('electron-updater');
+        // Delay a few seconds so the window is up before any update toast.
+        setTimeout(() => { autoUpdater.checkForUpdates().catch(() => {}); }, 5000);
+      }
+    }
+  } catch {}
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 const SIDECAR_RE = /\.review\.(ya?ml|json)$/i;
@@ -855,31 +868,57 @@ function semverGt(a, b) {
   }
   return false;
 }
+// electron-updater pulls releases directly from the configured GitHub repo
+// (see "publish" in package.json). On a newer release it downloads in the
+// background and installs on next quit. Disabled in dev (unpackaged) builds.
+let _updaterWired = false;
+let _updaterState = { status: 'idle', current: app.getVersion(), latest: null, error: null, progress: 0 };
+function wireAutoUpdater() {
+  if (_updaterWired) return;
+  _updaterWired = true;
+  try {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.on('checking-for-update', () => { _updaterState.status = 'checking'; });
+    autoUpdater.on('update-available', (info) => { _updaterState.status = 'downloading'; _updaterState.latest = info?.version || null; broadcastUpdate(); });
+    autoUpdater.on('update-not-available', (info) => { _updaterState.status = 'up-to-date'; _updaterState.latest = info?.version || null; broadcastUpdate(); });
+    autoUpdater.on('download-progress', (p) => { _updaterState.status = 'downloading'; _updaterState.progress = Math.round(p?.percent || 0); broadcastUpdate(); });
+    autoUpdater.on('update-downloaded', (info) => { _updaterState.status = 'ready'; _updaterState.latest = info?.version || _updaterState.latest; broadcastUpdate(); });
+    autoUpdater.on('error', (err) => { _updaterState.status = 'error'; _updaterState.error = String(err?.message || err); broadcastUpdate(); });
+  } catch (err) {
+    _updaterState.status = 'error';
+    _updaterState.error = 'electron-updater not available: ' + String(err?.message || err);
+  }
+}
+function broadcastUpdate() {
+  try {
+    const wins = require('electron').BrowserWindow.getAllWindows();
+    for (const w of wins) { try { w.webContents.send('updates:state', _updaterState); } catch {} }
+  } catch {}
+}
 ipcMain.handle('updates:check', async () => {
   try {
-    const s = await readSettings();
-    const url = (s.updateManifestUrl || '').trim();
-    if (!url) return { ok: false, error: 'No update manifest URL configured' };
-    // Use Electron's net module — works inside corp proxies better than fetch.
-    const { net } = require('electron');
-    const data = await new Promise((resolve, reject) => {
-      const req = net.request({ url, method: 'GET' });
-      let chunks = [];
-      req.on('response', (res) => {
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error('HTTP ' + res.statusCode));
-          return;
-        }
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-      });
-      req.on('error', reject);
-      req.end();
-    });
-    const manifest = JSON.parse(data);
+    if (!app.isPackaged) {
+      return { ok: true, current: app.getVersion(), latest: app.getVersion(), newer: false, dev: true, message: 'Auto-update disabled in dev build' };
+    }
+    wireAutoUpdater();
+    const { autoUpdater } = require('electron-updater');
+    const result = await autoUpdater.checkForUpdates();
     const cur = app.getVersion();
-    const newer = manifest?.version && semverGt(manifest.version, cur);
-    return { ok: true, current: cur, latest: manifest?.version, newer, downloadUrl: manifest?.downloadUrl, notes: manifest?.notes };
+    const latest = result?.updateInfo?.version || cur;
+    const newer = semverGt(latest, cur);
+    return { ok: true, current: cur, latest, newer, status: _updaterState.status };
+  } catch (err) { return { ok: false, error: String(err?.message || err) }; }
+});
+ipcMain.handle('updates:state', async () => _updaterState);
+ipcMain.handle('updates:install', async () => {
+  try {
+    if (!app.isPackaged) return { ok: false, error: 'Dev build' };
+    const { autoUpdater } = require('electron-updater');
+    if (_updaterState.status !== 'ready') return { ok: false, error: 'No update downloaded' };
+    setImmediate(() => { try { autoUpdater.quitAndInstall(); } catch {} });
+    return { ok: true };
   } catch (err) { return { ok: false, error: String(err?.message || err) }; }
 });
 
