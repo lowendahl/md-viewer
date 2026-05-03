@@ -1,0 +1,19 @@
+mrsf_version: "1.0"
+document: hello.md
+comments:
+  - id: c-demo-1
+    author: Sidemark Demo
+    timestamp: "2026-05-02T08:00:00+02:00"
+    text: "Welcome! This is an anchored comment on the heading line."
+    resolved: false
+    line: 1
+    type: question
+    severity: low
+  - id: c-demo-2
+    author: Sidemark Demo
+    timestamp: "2026-05-02T08:01:00+02:00"
+    text: "Inline highlight example — selected_text anchors a comment to a phrase."
+    resolved: false
+    line: 3
+    selected_text: "gutter badges and inline highlights"
+    type: clarity

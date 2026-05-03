@@ -1,0 +1,116 @@
+{
+  "name": "md-viewer",
+  "version": "1.3.1",
+  "description": "MD Viewer - Sidemark-aware markdown collaboration surface",
+  "main": "main.js",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "dev": "node dev.js",
+    "start": "node -e \"delete process.env.ELECTRON_RUN_AS_NODE; require('child_process').execSync('node build.js', {stdio:'inherit'}); require('child_process').spawn(require('electron'), ['.'], {stdio:'inherit'})\"",
+    "dist": "node build.js && electron-builder",
+    "dist:win": "node build.js && electron-builder --win",
+    "dist:portable": "node build.js && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "io.compass.mdviewer",
+    "productName": "MD Viewer",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "observability.js",
+      "index.html",
+      "styles.css",
+      "dist/**/*",
+      "assets/**/*",
+      "manual/**/*",
+      "CHANGELOG.md",
+      "package.json",
+      "node_modules/**/*",
+      "!_minrepro",
+      "!sample",
+      "!electron-stderr.log",
+      "!release",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/.bin"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MD Viewer",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "MDViewer-${version}-portable.exe"
+    },
+    "asar": true,
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      },
+      {
+        "ext": "markdown",
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      }
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@compass/observability": "file:C:/Users/plwendahl/repos/CSU-Compass/packages/observability",
+    "@milkdown/core": "^7.20.0",
+    "@milkdown/crepe": "^7.20.0",
+    "@milkdown/ctx": "^7.20.0",
+    "@milkdown/kit": "^7.20.0",
+    "@milkdown/plugin-listener": "^7.20.0",
+    "@milkdown/prose": "^7.20.0",
+    "@mrsf/marked-mrsf": "^0.4.9",
+    "@mrsf/milkdown-mrsf": "^0.3.0",
+    "chokidar": "^5.0.0",
+    "dompurify": "^3.4.2",
+    "js-yaml": "^4.1.1",
+    "marked": "^18.0.3",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
+    "png-to-ico": "^3.0.1"
+  }
+}

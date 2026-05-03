@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+electron-stderr.log
+*.log
+.DS_Store
+_minrepro/
