@@ -3,6 +3,20 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.5] — 2026-05-04
+
+### Fixed
+- **Toolbar "+ New file/folder" now creates inside the selected folder.** It
+  used to always plop the new item at the workspace root regardless of where
+  you were; now it honours the selected folder (or the selected file's parent),
+  expands it, and inserts the inline rename input there.
+- **Tree no longer expands itself on every refresh.** Expand/collapse state is
+  persisted per workspace in `localStorage` and restored after refreshes,
+  inline creates, and reopens. Default state for a fresh workspace is fully
+  collapsed; folders only open when you click them.
+- Click-selection now highlights any node (file or folder) with the existing
+  `.node.selected` style and survives tree refreshes.
+
 ## [1.3.4] — 2026-05-04
 
 ### Changed

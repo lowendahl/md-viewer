@@ -411,33 +411,86 @@ function escapeHtml(s) {
 
 function stripMd(name) { return name.replace(/\.(md|markdown)$/i, ''); }
 
+// Persisted tree state — which dir paths are expanded — keyed per workspace root.
+// Default: nothing expanded (tree starts fully collapsed). Last state is restored
+// on reopen / refresh, so creating a file no longer blows the whole tree open.
+function _expandStateKey() {
+  const root = localStorage.getItem('lastFolder') || '';
+  return 'mdv:expandedDirs:' + root;
+}
+function _loadExpanded() {
+  try { return new Set(JSON.parse(localStorage.getItem(_expandStateKey()) || '[]')); }
+  catch { return new Set(); }
+}
+function _saveExpanded(set) {
+  try { localStorage.setItem(_expandStateKey(), JSON.stringify([...set])); } catch {}
+}
+let _expandedDirs = _loadExpanded();
+function _setDirExpanded(path, open) {
+  if (open) _expandedDirs.add(path); else _expandedDirs.delete(path);
+  _saveExpanded(_expandedDirs);
+}
+
+// Tracks the currently selected node so toolbar "New file/folder" lands in
+// the right place even when the toolbar buttons (not the per-folder ＋) are used.
+let _selectedPath = null;
+let _selectedIsDir = false;
+function _setSelectedNode(el, path, isDir) {
+  document.querySelectorAll('#tree .node.selected').forEach(n => n.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  _selectedPath = path || null;
+  _selectedIsDir = !!isDir;
+}
+function _selectedDirForCreate() {
+  const root = localStorage.getItem('lastFolder');
+  if (!_selectedPath) return root;
+  if (_selectedIsDir) return _selectedPath;
+  // File selected → create in its parent dir.
+  return _selectedPath.replace(/[\\\/][^\\\/]+$/, '') || root;
+}
+function _findChildWrapForDir(dirPath) {
+  const head = document.querySelector(`#tree .node.dir[data-path="${CSS.escape(dirPath)}"]`);
+  if (!head) return null;
+  return head.parentElement?.querySelector(':scope > .children') || null;
+}
+
 function renderTree(node, container) {
   if (node.type === 'dir') {
     const wrap = document.createElement('div');
     wrap.dataset.path = node.path;
     wrap.dataset.type = 'dir';
     const head = document.createElement('div');
-    head.className = 'node dir open';
+    const isRoot = container === tree && !container.querySelector('.node');
+    // Root itself isn't shown as a row — its children render directly. Top-level
+    // dirs and below honour the saved expand set; default = collapsed.
+    const isOpen = _expandedDirs.has(node.path);
+    head.className = 'node dir' + (isOpen ? ' open' : '');
     head.dataset.path = node.path;
     head.dataset.type = 'dir';
     head.dataset.name = node.name;
     head.draggable = true;
     head.innerHTML = `<span class="caret">▶</span><svg class="ico-folder" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M1.5 3a1 1 0 0 1 1-1h3.379a1 1 0 0 1 .707.293l1.207 1.207A1 1 0 0 0 8.5 3.793h5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V3z"/></svg><span class="dir-name">${escapeHtml(node.name)}</span><button class="dir-add" title="New file in ${escapeHtml(node.name)}">＋</button>`;
     const childWrap = document.createElement('div');
-    childWrap.className = 'children';
+    childWrap.className = 'children' + (isOpen ? '' : ' collapsed');
     head.onclick = (e) => {
       if (e.target.closest('.dir-add')) return;
-      head.classList.toggle('open');
-      childWrap.classList.toggle('collapsed', !head.classList.contains('open'));
+      const nowOpen = !head.classList.contains('open');
+      head.classList.toggle('open', nowOpen);
+      childWrap.classList.toggle('collapsed', !nowOpen);
+      _setDirExpanded(node.path, nowOpen);
+      _setSelectedNode(head, node.path, true);
     };
     head.querySelector('.dir-add').onclick = (e) => {
       e.stopPropagation();
       head.classList.add('open');
       childWrap.classList.remove('collapsed');
+      _setDirExpanded(node.path, true);
+      _setSelectedNode(head, node.path, true);
       startInlineCreate(childWrap, node.path, 'file');
     };
     head.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      _setSelectedNode(head, node.path, true);
       showCtxMenu(e, { type: 'dir', path: node.path, name: node.name, headEl: head, childWrap });
     });
     attachTreeDragHandlers(head, { type: 'dir', path: node.path, name: node.name });
@@ -453,9 +506,10 @@ function renderTree(node, container) {
     item.draggable = true;
     item.title = node.path;
     item.innerHTML = `🖼 <span class="file-name">${escapeHtml(node.name)}</span>`;
-    item.onclick = () => openLightbox(node.path);
+    item.onclick = () => { _setSelectedNode(item, node.path, false); openLightbox(node.path); };
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      _setSelectedNode(item, node.path, false);
       showCtxMenu(e, { type: 'image', path: node.path, name: node.name, itemEl: item });
     });
     attachTreeDragHandlers(item, { type: 'image', path: node.path, name: node.name });
@@ -470,9 +524,10 @@ function renderTree(node, container) {
     const badge = node.hasComments ? ' <span class="cbadge" title="Has Sidemark comments">💬</span>' : '';
     const display = stripMd(node.name);
     item.innerHTML = `📄 <span class="file-name">${escapeHtml(display)}</span>${badge}`;
-    item.onclick = () => openFile(node.path);
+    item.onclick = () => { _setSelectedNode(item, node.path, false); openFile(node.path); };
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      _setSelectedNode(item, node.path, false);
       showCtxMenu(e, { type: 'file', path: node.path, name: node.name, itemEl: item });
     });
     attachTreeDragHandlers(item, { type: 'file', path: node.path, name: node.name });
@@ -727,11 +782,13 @@ function showCtxMenu(ev, ctx) {
     items.push({ label: '＋ New file', fn: () => {
       ctx.headEl.classList.add('open');
       ctx.childWrap.classList.remove('collapsed');
+      _setDirExpanded(ctx.path, true);
       startInlineCreate(ctx.childWrap, ctx.path, 'file');
     }});
     items.push({ label: '＋ New folder', fn: () => {
       ctx.headEl.classList.add('open');
       ctx.childWrap.classList.remove('collapsed');
+      _setDirExpanded(ctx.path, true);
       startInlineCreate(ctx.childWrap, ctx.path, 'dir');
     }});
     items.push({ sep: true });
@@ -842,10 +899,17 @@ function addLog(payload) {
 async function refreshTree() {
   const folder = localStorage.getItem('lastFolder');
   if (!folder) return;
+  // Reload the persisted expand set in case the workspace root changed under us.
+  _expandedDirs = _loadExpanded();
   const data = await api.loadTree(folder);
   tree.innerHTML = '';
   renderTree(data, tree);
   setActive(currentFile);
+  // Restore visible selection highlight after re-render.
+  if (_selectedPath) {
+    const sel = document.querySelector(`#tree .node[data-path="${CSS.escape(_selectedPath)}"]`);
+    if (sel) sel.classList.add('selected');
+  }
 }
 
 // ---- File open + Crepe lifecycle ----
@@ -1254,8 +1318,24 @@ pickBtn.onclick = async () => {
 async function startTopLevelCreate(kind) {
   const root = localStorage.getItem('lastFolder');
   if (!root) { alert('Open a folder first.'); return; }
-  // Use the tree root container as the parent — new node appears at top.
-  startInlineCreate(tree, root, kind);
+  // Honour the currently selected folder (or the parent of the selected file)
+  // so toolbar "+ New" doesn't always dump everything at the workspace root.
+  const targetDir = _selectedDirForCreate() || root;
+  let parentEl = tree;
+  if (targetDir && targetDir !== root) {
+    const childWrap = _findChildWrapForDir(targetDir);
+    if (childWrap) {
+      // Make sure the target folder is expanded so the new row is visible.
+      const head = document.querySelector(`#tree .node.dir[data-path="${CSS.escape(targetDir)}"]`);
+      if (head) {
+        head.classList.add('open');
+        childWrap.classList.remove('collapsed');
+        _setDirExpanded(targetDir, true);
+      }
+      parentEl = childWrap;
+    }
+  }
+  startInlineCreate(parentEl, targetDir, kind);
 }
 
 const newDocBtn = document.getElementById('new-doc');
