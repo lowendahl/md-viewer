@@ -82,6 +82,20 @@ function extractMdPathFromArgv(argv) {
     const a = argv[i];
     if (typeof a !== 'string') continue;
     if (a.startsWith('-')) continue;
+    // mdviewer:// custom protocol — paths come in as e.g. "mdviewer://C:/foo/bar.md"
+    const m = /^mdviewer:\/\/(.+)$/i.exec(a);
+    if (m) {
+      let raw = m[1].replace(/\/+$/, '');
+      try { raw = decodeURIComponent(raw); } catch {}
+      // Forward slashes → backslashes on Windows for absolute paths like C:/...
+      if (/^[a-z]:\//i.test(raw)) raw = raw.replace(/\//g, '\\');
+      try {
+        if (fssync.existsSync(raw) && fssync.statSync(raw).isFile() && /\.(md|markdown)$/i.test(raw)) {
+          return raw;
+        }
+      } catch {}
+      continue;
+    }
     if (!/\.(md|markdown)$/i.test(a)) continue;
     try {
       const resolved = path.resolve(a);
@@ -90,6 +104,21 @@ function extractMdPathFromArgv(argv) {
   }
   return null;
 }
+
+// Register custom protocol so URLs like
+//   mdviewer://C:/Users/me/notes/foo.md
+// open the file in this app. On packaged Windows builds the binary path is
+// passed through to the OS; in dev we point the registration at electron + the
+// project path.
+try {
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient('mdviewer', process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient('mdviewer');
+  }
+} catch {}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -111,6 +140,17 @@ app.on('open-file', (e, p) => {
   e.preventDefault();
   if (win) win.webContents.send('open-md-from-os', p);
   else pendingOpenPath = p;
+});
+
+// macOS: mdviewer:// URLs arrive via open-url.
+app.on('open-url', (e, url) => {
+  e.preventDefault();
+  const m = /^mdviewer:\/\/(.+)$/i.exec(url || '');
+  if (!m) return;
+  let raw = m[1].replace(/\/+$/, '');
+  try { raw = decodeURIComponent(raw); } catch {}
+  if (win) win.webContents.send('open-md-from-os', raw);
+  else pendingOpenPath = raw;
 });
 
 pendingOpenPath = extractMdPathFromArgv(process.argv);
@@ -267,6 +307,17 @@ ipcMain.handle('load-tree', async (_e, root) => {
 
 ipcMain.handle('read-file', async (_e, p) => fs.readFile(p, 'utf8'));
 ipcMain.handle('write-file', async (_e, p, content) => { await fs.writeFile(p, content, 'utf8'); return true; });
+
+// Lightweight stat for the path bar — paste a folder or .md path and we
+// route correctly without leaking exceptions across the IPC boundary.
+ipcMain.handle('stat-path', async (_e, p) => {
+  try {
+    const st = await fs.stat(p);
+    return { ok: true, isDir: st.isDirectory(), isFile: st.isFile() };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+});
 
 // Create a new markdown file. If `relPath` is missing, prompt the user.
 // Returns { ok, path, error }.

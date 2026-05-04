@@ -3,6 +3,22 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.6] — 2026-05-04
+
+### Added
+- **Pasteable path bar.** The workspace path in the sidebar is now an editable
+  input. Paste a folder path or a `.md` file path and press Enter — the app
+  loads the folder (or the file's containing folder) and opens the file. Also
+  accepts `mdviewer://…` and `file://…` URLs.
+- **Back / Forward / Up navigation.** A small nav strip next to the path bar
+  remembers root history. Pair it with the new "Focus from here" context-menu
+  entry on folders to drill in and out without losing your place.
+- **`mdviewer://` custom URL scheme.** Links of the form
+  `mdviewer://C:/Users/me/notes/foo.md` (or URL-encoded equivalents) now open
+  the file in MD Viewer when clicked from chats, browsers, or the Run dialog.
+  The NSIS installer registers the protocol on install; on macOS it's wired
+  via `open-url`.
+
 ## [1.3.5] — 2026-05-04
 
 ### Fixed

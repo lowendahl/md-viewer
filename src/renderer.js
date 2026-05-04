@@ -792,6 +792,8 @@ function showCtxMenu(ev, ctx) {
       startInlineCreate(ctx.childWrap, ctx.path, 'dir');
     }});
     items.push({ sep: true });
+    items.push({ label: '🎯 Focus from here', fn: () => loadRoot(ctx.path) });
+    items.push({ sep: true });
     items.push({ label: 'Open in Explorer', fn: () => api.showInExplorer(ctx.path) });
     items.push({ label: 'Rename', fn: () => startInlineRename(ctx.headEl, ctx.path, ctx.name, true) });
     items.push({ label: 'Delete folder', danger: true, fn: async () => {
@@ -1343,14 +1345,99 @@ if (newDocBtn) newDocBtn.onclick = () => startTopLevelCreate('file');
 const newFolderBtn = document.getElementById('new-folder');
 if (newFolderBtn) newFolderBtn.onclick = () => startTopLevelCreate('dir');
 
-async function loadRoot(folder) {
-  rootPathEl.textContent = folder;
+async function loadRoot(folder, opts) {
+  const skipHistory = opts && opts.skipHistory;
+  rootPathEl.value = folder;
   rootPathEl.title = folder;
+  // New root → fresh expand state, fresh selection.
+  _expandedDirs = _loadExpanded();
+  _selectedPath = null;
+  _selectedIsDir = false;
   const data = await api.loadTree(folder);
   tree.innerHTML = '';
   renderTree(data, tree);
   localStorage.setItem('lastFolder', folder);
   pushRecent(folder);
+  if (!skipHistory) _navPushRoot(folder);
+  _updateNavButtons();
+}
+
+// ---- Root navigation history (back / forward) ----------------------------
+const _rootHistory = [];
+let _rootHistoryIdx = -1;
+function _navPushRoot(folder) {
+  if (_rootHistoryIdx >= 0 && _rootHistory[_rootHistoryIdx] === folder) return;
+  _rootHistory.splice(_rootHistoryIdx + 1);
+  _rootHistory.push(folder);
+  _rootHistoryIdx = _rootHistory.length - 1;
+}
+function _updateNavButtons() {
+  const back = document.getElementById('nav-back');
+  const fwd = document.getElementById('nav-fwd');
+  const up = document.getElementById('nav-up');
+  if (back) back.disabled = _rootHistoryIdx <= 0;
+  if (fwd) fwd.disabled = _rootHistoryIdx >= _rootHistory.length - 1;
+  if (up) {
+    const cur = localStorage.getItem('lastFolder') || '';
+    const parent = cur ? cur.replace(/[\\\/][^\\\/]+[\\\/]?$/, '') : '';
+    up.disabled = !parent || parent === cur;
+  }
+}
+async function navBack() {
+  if (_rootHistoryIdx <= 0) return;
+  _rootHistoryIdx--;
+  await loadRoot(_rootHistory[_rootHistoryIdx], { skipHistory: true });
+}
+async function navForward() {
+  if (_rootHistoryIdx >= _rootHistory.length - 1) return;
+  _rootHistoryIdx++;
+  await loadRoot(_rootHistory[_rootHistoryIdx], { skipHistory: true });
+}
+async function navUp() {
+  const cur = localStorage.getItem('lastFolder') || '';
+  if (!cur) return;
+  const parent = cur.replace(/[\\\/][^\\\/]+[\\\/]?$/, '');
+  if (parent && parent !== cur) await loadRoot(parent);
+}
+
+// Resolves a pasted path: file → load its parent as root + open the file;
+// directory → load as root.
+async function openPathFromBar(rawInput) {
+  const raw = String(rawInput || '').trim().replace(/^["']|["']$/g, '');
+  if (!raw) return;
+  // Accept mdviewer:// URLs pasted into the bar too.
+  let p = raw;
+  const m = /^mdviewer:\/\/(.+)$/i.exec(p);
+  if (m) {
+    try { p = decodeURIComponent(m[1]); } catch { p = m[1]; }
+  } else if (/^file:\/\//i.test(p)) {
+    try { p = decodeURIComponent(p.replace(/^file:\/\/\/?/i, '')); } catch {}
+  }
+  // Normalize forward slashes back to backslashes on Windows for niceness.
+  if (/^[a-z]:\//i.test(p)) p = p.replace(/\//g, '\\');
+  try {
+    const info = await api.statPath(p);
+    if (!info?.ok) {
+      window.toast?.error?.('Path not found: ' + p);
+      rootPathEl.value = localStorage.getItem('lastFolder') || '';
+      return;
+    }
+    if (info.isDir) {
+      await loadRoot(p);
+    } else if (/\.(md|markdown)$/i.test(p)) {
+      const dir = p.replace(/[\\\/][^\\\/]+$/, '');
+      const cur = localStorage.getItem('lastFolder') || '';
+      const inside = cur && p.toLowerCase().startsWith(cur.toLowerCase().replace(/[\\\/]+$/, '') + (cur.includes('\\') ? '\\' : '/'));
+      if (!inside) await loadRoot(dir);
+      try { closeGallery(); } catch {}
+      openFile(p);
+    } else {
+      window.toast?.error?.('Not a markdown file: ' + p);
+      rootPathEl.value = localStorage.getItem('lastFolder') || '';
+    }
+  } catch (e) {
+    window.toast?.error?.(String(e?.message || e));
+  }
 }
 
 clearLogBtn.onclick = () => { logEl.innerHTML = ''; };
@@ -1387,13 +1474,24 @@ reanchorBtn.onclick = async () => {
       }
     } catch {}
   } else {
-    rootPathEl.textContent = '[tree disabled]';
+    rootPathEl.value = '[tree disabled]';
+    rootPathEl.disabled = true;
     pickBtn.disabled = true;
   }
+  // Wire nav strip + pasteable path bar.
+  document.getElementById('nav-back')?.addEventListener('click', navBack);
+  document.getElementById('nav-fwd')?.addEventListener('click', navForward);
+  document.getElementById('nav-up')?.addEventListener('click', navUp);
+  rootPathEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); openPathFromBar(rootPathEl.value); }
+    else if (e.key === 'Escape') { e.preventDefault(); rootPathEl.value = localStorage.getItem('lastFolder') || ''; rootPathEl.blur(); }
+  });
+  rootPathEl.addEventListener('focus', () => rootPathEl.select());
+  _updateNavButtons();
   api.onOpenMdFromOs(async (p) => {
     if (!p) return;
     const dir = p.replace(/[\\/][^\\/]+$/, '');
-    const currentRoot = rootPathEl.textContent;
+    const currentRoot = rootPathEl.value;
     const inside = currentRoot && (p === currentRoot || p.toLowerCase().startsWith(String(currentRoot).toLowerCase().replace(/[\\/]+$/, '') + (currentRoot.includes('\\') ? '\\' : '/')));
     if (!inside) await loadRoot(dir);
     try { closeGallery(); } catch {}

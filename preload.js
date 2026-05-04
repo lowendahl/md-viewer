@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   loadTree: (root) => ipcRenderer.invoke('load-tree', root),
   readFile: (p) => ipcRenderer.invoke('read-file', p),
+  statPath: (p) => ipcRenderer.invoke('stat-path', p),
   writeFile: (p, c) => ipcRenderer.invoke('write-file', p, c),
   readSidecar: (p) => ipcRenderer.invoke('read-sidecar', p),
   writeSidecar: (p, doc) => ipcRenderer.invoke('write-sidecar', p, doc),
