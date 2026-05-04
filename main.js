@@ -909,7 +909,21 @@ ipcMain.handle('updates:check', async () => {
     const latest = result?.updateInfo?.version || cur;
     const newer = semverGt(latest, cur);
     return { ok: true, current: cur, latest, newer, status: _updaterState.status };
-  } catch (err) { return { ok: false, error: String(err?.message || err) }; }
+  } catch (err) {
+    const raw = String(err?.message || err);
+    // electron-updater surfaces SAX parser errors when it gets an HTML login
+    // page (e.g. EMU SSO redirect) instead of latest.yml. Translate those into
+    // something a human can act on.
+    let friendly = raw;
+    if (/Attribute without value|Unexpected token|YAMLException|Invalid character/i.test(raw)) {
+      friendly = 'Update server returned an unexpected response (likely a private/SSO-protected release feed). Auto-updates are not configured for this build.';
+    } else if (/404|Not Found|HttpError/i.test(raw)) {
+      friendly = 'Update feed not found. The release may not be published yet.';
+    } else if (/ENOTFOUND|ETIMEDOUT|ECONNREFUSED|network/i.test(raw)) {
+      friendly = 'Could not reach update server. Check your internet connection.';
+    }
+    return { ok: false, error: friendly, raw };
+  }
 });
 ipcMain.handle('updates:state', async () => _updaterState);
 ipcMain.handle('updates:install', async () => {

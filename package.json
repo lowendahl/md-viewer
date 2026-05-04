@@ -1,6 +1,6 @@
 {
   "name": "md-viewer",
-  "version": "1.3.2",
+  "version": "1.3.4",
   "description": "MD Viewer - Sidemark-aware markdown collaboration surface",
   "main": "main.js",
   "scripts": {
@@ -73,9 +73,9 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "plwendahl_microsoft",
+        "owner": "lowendahl",
         "repo": "md-viewer",
-        "private": true,
+        "private": false,
         "releaseType": "release"
       }
     ],

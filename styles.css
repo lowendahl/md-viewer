@@ -812,6 +812,7 @@ body { display: flex; flex-direction: column; }
   z-index: 9000;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
+#find-bar.hidden { display: none; }
 #find-input {
   background: var(--surface-0); color: #e6e6e6;
   border: 1px solid var(--border-1); border-radius: 4px;

@@ -3,6 +3,28 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.4] — 2026-05-04
+
+### Changed
+- **Publishing moved to `lowendahl/md-viewer` (public).** Microsoft EMU repos
+  require SAML SSO, so anonymous fetches of `latest.yml` redirected to an HTML
+  login page that electron-updater couldn't parse — surfacing as
+  "Attribute without value Line: 26 Column: 76" on every check. Releases now
+  ship from a public personal repo so auto-updates work end-to-end.
+
+### Fixed
+- Friendlier toast when the update feed returns something unparseable
+  (translates the SAX/YAML noise into a human message).
+- Find bar (Ctrl+F) was permanently visible — `#find-bar.hidden` rule was
+  missing in CSS.
+
+## [1.3.3] — 2026-05-03
+
+### Fixed
+- **Find bar always visible / can't be closed.** `#find-bar` had `display: flex`
+  with no `.hidden` override, so toggling the `hidden` class did nothing and
+  the bar was permanently shown. Added `#find-bar.hidden { display: none }`.
+
 ## [1.3.2] — 2026-05-03
 
 ### Added
