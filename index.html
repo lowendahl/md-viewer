@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>MD Viewer</title>
+  <title>Chorus</title>
   <link rel="stylesheet" href="./assets/fonts/sora.css" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=chorus-4" />
   <link id="theme-css" rel="stylesheet" href="./dist/themes/frame-dark.css" />
 </head>
 <body>
-  <div id="brand-banner"></div>
+  <div id="brand-banner" hidden></div>
   <div id="app">
     <aside id="sidebar">
       <div id="sidebar-head">
@@ -30,7 +30,7 @@
           </button>
           <ul id="recents-menu" class="dropdown-menu hidden"></ul>
         </div>
-        <div id="nav-bar">
+        <div id="nav-bar" hidden>
           <button id="nav-back" class="nav-btn" title="Back" disabled>‹</button>
           <button id="nav-fwd" class="nav-btn" title="Forward" disabled>›</button>
           <button id="nav-up" class="nav-btn" title="Parent folder">↑</button>
@@ -66,6 +66,7 @@
             </ul>
           </div>
           <button id="reanchor-btn" title="Re-anchor comments to current text">⚓ Re-anchor</button>
+          <button id="ai-ask-btn" title="Ask Chorus about selection (Ctrl+Shift+A)">Ask Chorus <span id="ai-status-dot" class="ai-dot ai-dot-grey" title="Chorus status"></span></button>
           <button id="undo-btn" title="Undo (Ctrl+Z)" disabled>↶</button>
           <button id="redo-btn" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
           <span id="dirty-dot" class="hidden">●</span>

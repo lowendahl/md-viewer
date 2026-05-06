@@ -11,8 +11,8 @@ const { installObservability, emit: obsEmit } = require('./observability');
 // Crash reporter MUST start before app.ready to capture native crashes.
 // Dumps land under app.getPath('crashDumps').
 crashReporter.start({
-  productName: 'md-viewer',
-  companyName: 'local',
+  productName: 'Chorus',
+  companyName: 'Symbiont',
   uploadToServer: false,
   ignoreSystemCrashHandler: false,
 });
@@ -179,7 +179,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: 'MD Viewer',
+    title: 'Chorus',
     icon: path.join(__dirname, 'build', 'icon.ico'),
     autoHideMenuBar: true,
     backgroundColor: '#0A1224',
@@ -1155,3 +1155,68 @@ ipcMain.handle('analytics:open-log-dir', async () => {
     return r ? { ok: false, error: r } : { ok: true };
   } catch (err) { return { ok: false, error: String(err?.message || err) }; }
 });
+
+// ---- Symbiont Chorus (MCP server) ---------------------------------------
+// Discovery: %LOCALAPPDATA%\Symbiont\chorus.json
+// Endpoints: GET /health, POST /ask, POST /reply
+// Chorus writes results into the doc's MRSF sidecar; viewer's existing
+// chokidar watcher renders them in the gutter. Renderer never speaks
+// HTTP directly so we sidestep CSP / mixed-content concerns.
+const _http = require('http');
+function _bridgeDiscoveryPath() {
+  const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  const current = path.join(local, 'Symbiont', 'chorus.json');
+  if (fssync.existsSync(current)) return current;
+  // Legacy fallback during the rename window.
+  const legacy = path.join(local, 'Clawpilot', 'md-viewer-bridge.json');
+  return legacy;
+}
+function _readBridgeInfo() {
+  try {
+    const raw = fssync.readFileSync(_bridgeDiscoveryPath(), 'utf8');
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+function _bridgeFetch(method, p, body) {
+  return new Promise((resolve) => {
+    const info = _readBridgeInfo();
+    if (!info?.port) return resolve({ ok: false, error: 'Chorus not running', code: 'NO_CHORUS' });
+    const data = body ? Buffer.from(JSON.stringify(body), 'utf8') : null;
+    const req = _http.request(
+      {
+        host: '127.0.0.1', port: info.port, path: p, method,
+        headers: data ? { 'content-type': 'application/json', 'content-length': data.length } : {},
+        timeout: 8000,
+      },
+      (res) => {
+        let buf = '';
+        res.on('data', (c) => (buf += c));
+        res.on('end', () => {
+          try {
+            const json = buf ? JSON.parse(buf) : null;
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({ ok: true, ...(json || {}) });
+            } else {
+              resolve({ ok: false, status: res.statusCode, error: json?.error || buf });
+            }
+          } catch (err) {
+            resolve({ ok: false, error: 'invalid bridge response: ' + err.message });
+          }
+        });
+      }
+    );
+    req.on('error', (err) => resolve({ ok: false, error: err.message, code: err.code }));
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false, error: 'chorus timeout', code: 'TIMEOUT' }); });
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+ipcMain.handle('bridge:health', async () => {
+  const info = _readBridgeInfo();
+  if (!info?.port) return { ok: false, error: 'Chorus not running', code: 'NO_CHORUS' };
+  const res = await _bridgeFetch('GET', '/health');
+  return res.ok ? { ok: true, port: info.port, ...res } : res;
+});
+ipcMain.handle('bridge:ask', async (_e, payload) => _bridgeFetch('POST', '/ask', payload));
+ipcMain.handle('bridge:reply', async (_e, payload) => _bridgeFetch('POST', '/reply', payload));

@@ -11,6 +11,12 @@ import {
   getCrepeMrsfController,
 } from '@mrsf/milkdown-mrsf';
 import {
+  startBridgeStatusPolling,
+  onBridgeStatus,
+  ask as bridgeAsk,
+  notifyReply as bridgeReply,
+} from './chorus.js';
+import {
   createCsuLinkifyFeature,
   configureFromMarkdown as configureCsuLinkify,
   setLinkifyEnabled as setCsuLinkifyEnabled,
@@ -142,6 +148,8 @@ const saveBtn = document.getElementById('save-btn');
 const clearLogBtn = document.getElementById('clear-log');
 const commentCountEl = document.getElementById('comment-count');
 const reanchorBtn = document.getElementById('reanchor-btn');
+const aiAskBtn = document.getElementById('ai-ask-btn');
+const aiStatusDot = document.getElementById('ai-status-dot');
 const undoBtn = document.getElementById('undo-btn');
 const redoBtn = document.getElementById('redo-btn');
 
@@ -149,6 +157,7 @@ const api = window.api;
 
 let currentFile = null;
 let currentFileDir = '';
+let currentMd = '';
 let crepe = null;
 let dirty = false;
 let saveTimer = null;
@@ -1000,6 +1009,7 @@ async function openFile(p) {
   setActive(p);
 
   const md = await api.readFile(p);
+  currentMd = md;
   editorEl.innerHTML = '';
 
   // CSU linkify: parse frontmatter csu_ids: map and push to plugin state.
@@ -1036,6 +1046,8 @@ async function openFile(p) {
             .then(t => console.log('[mrsf] wrote sidecar', t, 'comments:', doc.comments?.length))
             .catch(err => console.warn('[mrsf] direct save failed', err));
         }
+        // V1.5: notify the LLM bridge when the user replies to an agent comment.
+        if (doc) _notifyAgentReplies(p, doc);
         // 2) Then update UI (guarded + freeze-guarded).
         // V1.4: schedule re-render off the critical path so a slow comment
         // re-layout doesn't block ProseMirror's transaction loop. Time it
@@ -1558,6 +1570,92 @@ reanchorBtn.onclick = async () => {
     }
   } catch (e) { console.warn(e); }
 };
+
+// ---- V1.5 LLM bridge wiring --------------------------------------------
+const _notifiedReplies = new Set();
+function _notifyAgentReplies(docPath, doc) {
+  const all = Array.isArray(doc?.comments) ? doc.comments : [];
+  if (!all.length) return;
+  const byId = new Map(all.map((c) => [c.id, c]));
+  for (const c of all) {
+    if (!c.reply_to) continue;
+    if (_notifiedReplies.has(c.id)) continue;
+    const author = String(c.author || '');
+    // Skip replies by the agent itself.
+    if (author.includes('agent')) { _notifiedReplies.add(c.id); continue; }
+    // Walk up to find the root.
+    let root = byId.get(c.reply_to);
+    while (root?.reply_to) root = byId.get(root.reply_to);
+    if (!root) continue;
+    if (!String(root.author || '').includes('agent')) continue;
+    _notifiedReplies.add(c.id);
+    // Fire-and-forget — Chorus queues the user reply as a new pending question.
+    bridgeReply({ docPath, threadId: root.id, replyText: c.text })
+      .then((res) => {
+        if (!res?.ok) console.warn('[chorus:reply] failed', res?.error);
+      })
+      .catch((err) => console.warn('[chorus:reply] threw', err));
+  }
+}
+
+function _parseFrontMatter(md) {
+  if (!md || !md.startsWith('---')) return {};
+  const end = md.indexOf('\n---', 3);
+  if (end === -1) return {};
+  const block = md.slice(3, end).trim();
+  const out = {};
+  for (const line of block.split(/\r?\n/)) {
+    const m = /^([A-Za-z0-9_.-]+)\s*:\s*(.*)$/.exec(line);
+    if (m) out[m[1]] = m[2];
+  }
+  return out;
+}
+
+async function _askChorus(intent = 'ask') {
+  if (!currentFile) {
+    window.toast?.warning?.('Open a document first.');
+    return;
+  }
+  const res = await bridgeAsk({
+    docPath: currentFile,
+    sourceMd: currentMd,
+    intent,
+  });
+  if (!res?.ok) {
+    window.toast?.error?.(res?.error || 'Chorus call failed');
+  } else {
+    window.toast?.info?.('Question queued — Clawpilot will answer in the gutter.');
+  }
+}
+
+if (aiAskBtn) {
+  aiAskBtn.onclick = () => _askChorus('ask');
+}
+
+window.addEventListener('keydown', (ev) => {
+  if (ev.ctrlKey && ev.shiftKey && (ev.key === 'A' || ev.key === 'a')) {
+    ev.preventDefault();
+    _askChorus('ask');
+  }
+});
+
+onBridgeStatus((s) => {
+  if (!aiStatusDot || !aiAskBtn) return;
+  aiStatusDot.classList.remove('ai-dot-grey', 'ai-dot-green', 'ai-dot-amber');
+  if (s.connected) {
+    const hasPending = typeof s.pending === 'number' && s.pending > 0;
+    aiStatusDot.classList.add(hasPending ? 'ai-dot-amber' : 'ai-dot-green');
+    aiAskBtn.disabled = false;
+    const pendingNote = hasPending ? `\n${s.pending} question(s) pending` : '';
+    aiAskBtn.title = `Ask Chorus about selection (Ctrl+Shift+A)\nMode: ${s.mode || 'inverted-mcp'}\nPort: ${s.port || '?'}${pendingNote}`;
+  } else {
+    aiStatusDot.classList.add('ai-dot-grey');
+    aiAskBtn.disabled = true;
+    aiAskBtn.title = 'Chorus offline. Start Clawpilot to enable AI features.';
+  }
+});
+
+startBridgeStatusPolling();
 
 // ---- Boot ----
 (async () => {

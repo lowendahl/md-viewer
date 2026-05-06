@@ -1,26 +1,26 @@
 {
-  "name": "md-viewer",
-  "version": "1.5.0",
-  "description": "MD Viewer - Sidemark-aware markdown collaboration surface",
+  "name": "chorus",
+  "version": "1.6.0",
+  "description": "Chorus — the collaborate surface of Symbiont. Sidemark-aware markdown collaboration layer for CSU.",
   "main": "main.js",
   "scripts": {
     "build": "node build.js",
     "watch": "node build.js --watch",
     "dev": "node dev.js",
-    "start": "node -e \"delete process.env.ELECTRON_RUN_AS_NODE; require('child_process').execSync('node build.js', {stdio:'inherit'}); require('child_process').spawn(require('electron'), ['.'], {stdio:'inherit'})\"",
+    "start": "node scripts/start-dev.js",
     "dist": "node build.js && electron-builder",
     "dist:win": "node build.js && electron-builder --win",
     "dist:portable": "node build.js && electron-builder --win portable",
     "release": "node build.js && electron-builder --win --publish always"
   },
   "build": {
-    "appId": "io.compass.mdviewer",
-    "productName": "MD Viewer",
+    "appId": "io.symbiont.chorus",
+    "productName": "Chorus",
     "protocols": [
       {
-        "name": "MD Viewer",
+        "name": "Chorus",
         "schemes": [
-          "mdviewer"
+          "chorus"
         ]
       }
     ],
@@ -71,7 +71,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MD Viewer",
+      "shortcutName": "Chorus",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico"
     },

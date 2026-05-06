@@ -151,7 +151,7 @@ async function openSettings() {
         <span>Shell style</span>
         <select data-key="vscodeShell">
           <option value="true">VS Code (default)</option>
-          <option value="false">Classic MD Viewer</option>
+          <option value="false">Classic</option>
         </select>
       </label>
       <label class="mdv-row">
@@ -278,8 +278,8 @@ async function openAbout() {
   root.innerHTML = `
     <div class="mdv-about">
       <div class="mdv-about-banner"></div>
-      <h2>MD Viewer</h2>
-      <p class="mdv-muted">A focused, fast Markdown editor with Sidemark review comments.</p>
+      <h2>Chorus</h2>
+      <p class="mdv-muted">CSU · Symbiont Chorus — anchored markdown collaboration. Many voices. One passage.</p>
       <table class="mdv-kv">
         <tr><td>Version</td><td>${escHtml(info.version || '?')}</td></tr>
         <tr><td>Electron</td><td>${escHtml(info.electron || '?')}</td></tr>
@@ -297,7 +297,7 @@ async function openAbout() {
       </div>
     </div>
   `;
-  const m = openModal('About MD Viewer', root);
+  const m = openModal('About Chorus', root);
   root.querySelector('#about-manual').onclick = () => openManual();
   root.querySelector('#about-changelog').onclick = () => openChangelog();
   root.querySelector('#about-check').onclick = () => runUpdateCheck(true);

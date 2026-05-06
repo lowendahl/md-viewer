@@ -1,26 +1,35 @@
 * { box-sizing: border-box; }
 :root {
-  /* MD Viewer brand palette */
-  --deep-navy: #0A1224;
-  --midnight-blue: #0F1E3C;
-  --electric-blue: #2563FF;
-  --cyan-glow: #00E5FF;
-  --teal-accent: #00BFAE;
-  --cool-gray: #A7B2C2;
-  --soft-off-white: #F5F7FA;
-  /* Surface tones derived from the palette — replace legacy greys */
-  --surface-0: #0A1224;     /* app background */
-  --surface-1: #0F1E3C;     /* sidebar / left panel */
-  --surface-2: #122247;     /* topbar over editor */
-  --surface-3: #16294f;     /* dropdowns / menus */
-  --surface-4: #1d325f;     /* hover surfaces / pills */
-  --border-1: #1a2b54;      /* primary divider */
-  --border-2: #233b6c;      /* card / button border */
-  /* Aliases used through the rest of the stylesheet */
-  --accent: var(--electric-blue);
-  --accent-2: #1f54e0;
-  --accent-bg: rgba(37,99,255,0.14);
-  --brand-grad: linear-gradient(90deg, var(--deep-navy) 0%, var(--electric-blue) 60%, var(--cyan-glow) 100%);
+  /* Chorus brand palette (CSU · Symbiont Chorus) */
+  --chorus-deep-tide:   #0A1F2A;  /* primary surface */
+  --chorus-pale-coral:  #F2A48C;  /* warm accent — collaboration */
+  --chorus-bone:        #F4EDE0;  /* primary text on dark */
+  --chorus-muted-slate: #6B7B82;  /* secondary text / inactive */
+  --chorus-signal:      #3FE0B0;  /* family signal — live anchor only */
+
+  /* Legacy palette names retained as aliases so the rest of the
+     stylesheet keeps working while we migrate. */
+  --deep-navy:      var(--chorus-deep-tide);
+  --midnight-blue:  #0F2A38;     /* sidebar — slightly lifted from deep tide */
+  --electric-blue:  var(--chorus-pale-coral);
+  --cyan-glow:      var(--chorus-signal);
+  --teal-accent:    var(--chorus-signal);
+  --cool-gray:      var(--chorus-muted-slate);
+  --soft-off-white: var(--chorus-bone);
+
+  /* Surface tones */
+  --surface-0: var(--chorus-deep-tide);
+  --surface-1: #0F2A38;
+  --surface-2: #143242;
+  --surface-3: #183B4D;
+  --surface-4: #1F4A5E;
+  --border-1: #18313F;
+  --border-2: #1F4458;
+
+  --accent:    var(--chorus-pale-coral);
+  --accent-2:  #E08F75;                     /* coral hover (slightly deeper) */
+  --accent-bg: rgba(242,164,140,0.14);
+  --brand-grad: linear-gradient(90deg, var(--chorus-deep-tide) 0%, var(--chorus-pale-coral) 70%, var(--chorus-signal) 100%);
 }
 html, body { margin: 0; height: 100%; font-family: "Sora", -apple-system, "Segoe UI", system-ui, sans-serif; background: var(--deep-navy); color: #e6e6e6; }
 body { display: flex; flex-direction: column; }
@@ -31,6 +40,7 @@ body { display: flex; flex-direction: column; }
   border-bottom: 1px solid #000;
   -webkit-app-region: drag;
 }
+#brand-banner[hidden] { display: none !important; }
 #brand-banner button, #brand-banner a { -webkit-app-region: no-drag; }
 #app { display: flex; flex: 1 1 auto; min-height: 0; }
 
@@ -50,8 +60,8 @@ body { display: flex; flex-direction: column; }
   cursor: pointer;
   white-space: nowrap;
 }
-.btn-blue { background: var(--accent); color: #fff; flex: 1 1 auto; justify-content: center; }
-.btn-blue:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn-blue { background: var(--accent); color: var(--chorus-deep-tide); flex: 1 1 auto; justify-content: center; font-weight: 600; }
+.btn-blue:hover { background: var(--accent-2); border-color: var(--accent-2); color: var(--chorus-deep-tide); }
 .btn-blue-ghost { background: transparent; color: var(--accent); padding: 0 8px; }
 .btn-blue-ghost:hover { background: var(--accent-bg); }
 .btn-blue .ico, .btn-blue-ghost .ico { font-size: 13px; line-height: 1; }
@@ -77,6 +87,7 @@ body { display: flex; flex-direction: column; }
   margin-top: 8px;
   display: flex; align-items: center; gap: 4px;
 }
+#nav-bar[hidden] { display: none !important; }
 .nav-btn {
   flex: 0 0 auto;
   background: transparent; color: #c0c5d0;
@@ -875,14 +886,16 @@ mark.mdv-find-current { background: rgba(245,192,70,0.85); color: #000; outline:
 
 /* ---- Topbar buttons ---- */
 .topbar-btn {
-  background: transparent; color: #c0c5d0;
+  background: transparent; color: var(--chorus-muted-slate);
   border: 1px solid transparent;
   border-radius: 4px;
   width: 28px; height: 28px;
   font-size: 14px; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
-.topbar-btn:hover { background: var(--accent-bg); color: #fff; border-color: var(--border-2); }
+.topbar-btn:hover { background: var(--accent-bg); color: var(--chorus-bone); border-color: var(--border-2); }
+.topbar-btn.active, .topbar-btn:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
 
 /* ---- Tree selection (V1.3) ---- */
 .node.selected:not(.active) {
@@ -903,9 +916,9 @@ body.vscode-shell {
   --surface-4: #3c3c3c;     /* hover */
   --border-1: #1f1f1f;
   --border-2: #3c3c3c;
-  --accent: #0e639c;
-  --accent-2: #1177bb;
-  --accent-bg: rgba(14,99,156,0.18);
+  --accent: var(--chorus-pale-coral);
+  --accent-2: #E08F75;
+  --accent-bg: rgba(242,164,140,0.14);
   font-size: 13px;
 }
 body.vscode-shell #brand-banner {
@@ -972,9 +985,9 @@ body.light {
   --surface-4: #e0e0e0;
   --border-1: #e1e4e8;
   --border-2: #d0d7de;
-  --accent: #0969da;
-  --accent-2: #0550ae;
-  --accent-bg: rgba(9,105,218,0.12);
+  --accent: #C8704F;
+  --accent-2: #A05A3F;
+  --accent-bg: rgba(200,112,79,0.12);
   background: #ffffff; color: #1f2328;
 }
 body.light #brand-banner { background: #fff url('./assets/topbar-banner.png') 12px center / auto 36px no-repeat; border-bottom: 1px solid #d0d7de; }
@@ -986,8 +999,8 @@ body.light.vscode-shell {
   --surface-4: #ececec;
   --border-1: #e1e4e8;
   --border-2: #d0d7de;
-  --accent: #0e639c;
-  --accent-2: #1177bb;
+  --accent: #C8704F;
+  --accent-2: #A05A3F;
   color: #1f2328;
 }
 body.light #sidebar, body.light #rightrail { color: #1f2328; }
@@ -1106,3 +1119,12 @@ body.mdv-cmt-gutter [data-mrsf-comment] {
 body.mdv-light .csu-link { border-bottom-color: rgba(33, 99, 215, 0.45); }
 body.mdv-light .csu-link:hover { background: rgba(33, 99, 215, 0.08); border-bottom-color: rgba(33, 99, 215, 0.95); }
 body.mdv-light .csu-link--mapped { color: #2163d7; }
+
+/* V1.5 — LLM bridge status dot */
+.ai-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-left: 6px; vertical-align: middle; }
+.ai-dot-grey { background: #888; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.ai-dot-green { background: #2ecc71; box-shadow: 0 0 4px rgba(46,204,113,0.6); }
+.ai-dot-amber { background: #e67e22; }
+#ai-ask-btn { display: inline-flex; align-items: center; gap: 4px; }
+#ai-ask-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+

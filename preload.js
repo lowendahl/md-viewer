@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('api', {
   analyticsSnapshot: (opts) => ipcRenderer.invoke('analytics:snapshot', opts),
   analyticsOpenLog: () => ipcRenderer.invoke('analytics:open-log'),
   analyticsOpenLogDir: () => ipcRenderer.invoke('analytics:open-log-dir'),
+  // V1.5 LLM bridge
+  bridgeHealth: () => ipcRenderer.invoke('bridge:health'),
+  bridgeAsk: (payload) => ipcRenderer.invoke('bridge:ask', payload),
+  bridgeReply: (payload) => ipcRenderer.invoke('bridge:reply', payload),
 });
 
 // Feature flags surfaced from main via additionalArguments.

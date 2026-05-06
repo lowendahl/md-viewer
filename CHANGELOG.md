@@ -1,9 +1,75 @@
-# MD Viewer — Changelog
+# Chorus — Changelog
 
-All notable changes to MD Viewer.
+All notable changes to Chorus (formerly MD Viewer).
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.6.0] — 2026-05-06 — Chorus rebrand
+
+### Changed
+- **Renamed app to Chorus.** The markdown collaboration surface is now
+  formally **CSU · Symbiont Chorus** — sibling to Augur (sense) and
+  Stride (act) in the Symbiont family. New app icon, new wordmark in
+  the topbar, new About dialog copy. Tagline: *Many voices. One
+  passage.* Electron `productName` is now `Chorus`, `appId` is
+  `io.symbiont.chorus`, URL scheme is `chorus://`. **Heads-up:** the
+  per-user data folder moves from `%APPDATA%\MD Viewer\` to
+  `%APPDATA%\Chorus\`. Existing settings / drafts / logs are not
+  migrated automatically — copy the old folder over if you want them.
+  GitHub release repo (`lowendahl/md-viewer`) is unchanged for now.
+- **Chorus brand palette.** Replaced the Electric Blue / Cyan Glow
+  palette with the locked Chorus palette: Deep Tide `#0A1F2A`, Pale
+  Coral `#F2A48C` (primary accent), Bone `#F4EDE0`, Muted Slate
+  `#6B7B82`, family signal `#3FE0B0` (reserved for the live anchor
+  dot only). Open folder, ghost buttons, focus rings, tree selection,
+  active file row, and topbar buttons are all on coral now. VS Code
+  shell mode and light theme accent overrides updated to match.
+- **Topbar buttons** sit in muted slate by default and tint coral on
+  hover / focus / active so the toolbar reads as one cohesive surface.
+- **Sidebar header simplified.** The redundant nav row (back / forward
+  / parent / paste-path input) is hidden — the path picker covers the
+  same need without the visual weight.
+- **Brand banner row removed.** The Windows title bar already shows
+  the Chorus icon and name; the secondary banner was duplicate
+  branding.
+- **`Ask Chorus` button** dropped the prototype 🤖 emoji per the
+  brand brief (no generic-AI cues).
+- **Sidecar comment types.** Pending questions are now written as
+  `type: chorus-question` and agent replies as `type: chorus-reply`
+  in the MRSF sidecar. Existing `type: question` comments still
+  surface — only newly authored items use the new tags.
+
+### Added
+- **Symbiont Chorus — LLM collaboration V1 (🤖 Ask Chorus).** New
+  toolbar button and `Ctrl+Shift+A` hotkey queue a question about the
+  current selection. The question is written into the document's MRSF
+  sidecar as a pending comment authored by you; Clawpilot picks it up
+  via Chorus's MCP tools (`chorus_list_pending`, `chorus_get_question`,
+  `chorus_answer`) and writes the answer back as an agent reply, which
+  the existing sidecar watcher renders in the gutter. User replies in
+  a thread re-queue the conversation so it can continue inline. A
+  status dot shows Chorus state — green when the
+  `symbiont-chorus` MCP server is up and the queue is empty, amber
+  when there are pending questions, grey when Clawpilot isn't running.
+  Architecture: `symbiont-chorus` is a Node MCP server (registered in
+  `m-mcp-servers.json`) that runs a loopback HTTP listener; the viewer
+  talks to it via main-process IPC. No LLM credentials live in the
+  viewer or in Chorus — Clawpilot itself does the thinking. Design
+  doc: `product-design/md-viewer/llm-collaboration.md`.
+
+### Known gaps
+- No per-folder privacy gate yet — every Ask is queued.
+- Answers arrive only when Clawpilot is open and processing the
+  Chorus queue. Pair with a Clawpilot automation for near-real-time
+  replies.
+- Selection→line anchor uses a simple string match against the
+  source markdown, which can fail for selections that span Crepe-
+  rendered transformations (lists, code fences, etc.). Falls back to
+  an unanchored agent comment in that case.
+
+### Backlog
+- **Direct-LLM mode (Option 2)** for instant answers without a
+  Clawpilot session. Provider will be **Microsoft Fabric** (data-safe
+  for MS business content), not Anthropic / OpenAI direct.
 
 ## [1.5.0] — 2026-05-06
 
