@@ -205,6 +205,16 @@ async function openSettings() {
         </select>
       </label>
 
+      <h3>CSU / MSX links</h3>
+      <label class="mdv-row">
+        <span>Auto-linkify CSU/MSX/eSXP IDs</span>
+        <input data-key="csuLinkifyEnabled" type="checkbox" />
+      </label>
+      <div class="mdv-row">
+        <span></span>
+        <span class="mdv-muted">Underlines opportunity numbers (<code>7-XXXXXXXXX</code>) and explicit prefixes (<code>TPID:</code> / <code>CSP:</code> / <code>AGR:</code> / <code>MSX:</code>) so a click opens MSX / eSXP. Map slugs to GUIDs via a <code>csu_ids:</code> frontmatter block — see the manual.</span>
+      </div>
+
       <h3>Privacy</h3>
       <label class="mdv-row">
         <span>Anonymous telemetry (local only)</span>

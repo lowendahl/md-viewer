@@ -88,16 +88,32 @@ body { display: flex; flex-direction: column; }
 .nav-btn:hover:not(:disabled) { background: var(--accent-bg); color: #fff; }
 .nav-btn:disabled { opacity: 0.35; cursor: default; }
 
-/* Folder gallery panel — replaces editor when no file open / Home pressed */
+/* Folder gallery panel — overlay above editor (V1.4.2: was inline, blocked editor) */
 #editor-host { position: relative; }
 #gallery-panel {
   position: absolute; inset: 0;
-  background: #14161b;
+  background: rgba(20, 22, 27, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex; flex-direction: column;
-  z-index: 5;
+  z-index: 50;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--border-1);
+  animation: gallery-fade-in 120ms ease-out;
 }
 #gallery-panel.hidden { display: none; }
+@keyframes gallery-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.gallery-controls { display: flex; align-items: center; gap: 8px; }
+#gallery-close {
+  background: transparent; border: 1px solid var(--border-1); color: #b8babf;
+  width: 28px; height: 28px; border-radius: 6px;
+  font-size: 18px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+#gallery-close:hover { background: #ff5a4820; color: #ff7a6c; border-color: #ff7a6c; }
 #gallery-panel .gallery-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 22px; border-bottom: 1px solid var(--border-1);
@@ -177,8 +193,6 @@ body { display: flex; flex-direction: column; }
 .seg-toggle button:last-child { border-right: 0; }
 .seg-toggle button:hover { background: var(--accent-bg); color: var(--accent); }
 .seg-toggle button.active { background: var(--accent); color: #fff; }
-#gallery-close { background: transparent; border: 0; color: #8a8d96; font-size: 18px; cursor: pointer; }
-#gallery-close:hover { color: #fff; }
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1068,3 +1082,27 @@ body.mdv-cmt-gutter [data-mrsf-comment] {
   box-shadow: none !important;
   text-decoration: none !important;
 }
+
+/* ============================================================
+ * V1.5 — CSU auto-linkify (csu-linkify/index.js)
+ * Non-destructive ProseMirror decorations: a class on selected ranges only.
+ * The underlying text is unchanged in the saved markdown.
+ * ============================================================ */
+.csu-link {
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(122, 162, 247, 0.55);
+  transition: background 80ms ease, border-color 80ms ease;
+}
+.csu-link:hover {
+  background: rgba(122, 162, 247, 0.10);
+  border-bottom-color: rgba(122, 162, 247, 0.95);
+}
+.csu-link--mapped { color: var(--accent, #7aa2f7); }
+.csu-link--fallback { color: inherit; border-bottom-style: dotted; opacity: 0.85; }
+.csu-link--opp::before  { content: ''; }
+.csu-link--tpid::before { content: ''; }
+.csu-link--csp::before  { content: ''; }
+.csu-link--agr::before  { content: ''; }
+body.mdv-light .csu-link { border-bottom-color: rgba(33, 99, 215, 0.45); }
+body.mdv-light .csu-link:hover { background: rgba(33, 99, 215, 0.08); border-bottom-color: rgba(33, 99, 215, 0.95); }
+body.mdv-light .csu-link--mapped { color: #2163d7; }

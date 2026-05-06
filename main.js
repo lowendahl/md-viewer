@@ -781,6 +781,7 @@ const SETTINGS_DEFAULT = {
   showResolvedComments: false,
   treeImagesVisible: true,
   commentOverlay: 'inline', // 'inline' | 'gutter-only' | 'off'  (V1.4)
+  csuLinkifyEnabled: true,  // V1.5: auto-linkify CSU/MSX/eSXP IDs
 };
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }

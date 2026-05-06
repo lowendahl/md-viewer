@@ -10,6 +10,11 @@ import {
   createCrepeMrsfToolbarConfig,
   getCrepeMrsfController,
 } from '@mrsf/milkdown-mrsf';
+import {
+  createCsuLinkifyFeature,
+  configureFromMarkdown as configureCsuLinkify,
+  setLinkifyEnabled as setCsuLinkifyEnabled,
+} from './csu-linkify/index.js';
 import { marked as _markedLib } from 'marked';
 const _marked = _markedLib;
 try { window._marked = _markedLib; } catch {}
@@ -997,6 +1002,16 @@ async function openFile(p) {
   const md = await api.readFile(p);
   editorEl.innerHTML = '';
 
+  // CSU linkify: parse frontmatter csu_ids: map and push to plugin state.
+  // Plugin presence is decided by the persisted csuLinkifyEnabled setting.
+  let csuLinkifyOn = true;
+  try {
+    const s = await api.getSettings();
+    csuLinkifyOn = s && s.csuLinkifyEnabled !== false;
+  } catch {}
+  try { configureCsuLinkify(md); } catch (e) { console.warn('[csu-linkify] frontmatter parse failed', e); }
+  try { setCsuLinkifyEnabled(csuLinkifyOn); } catch {}
+
   const crepeOpts = { root: editorEl, defaultValue: md, featureConfigs: {} };
   if (FLAGS.comments) {
     const mrsfOptions = {
@@ -1052,6 +1067,9 @@ async function openFile(p) {
   } else {
     crepe = new Crepe(crepeOpts);
   }
+  // CSU auto-linkify: registers a non-destructive ProseMirror decoration
+  // overlay (no DOM mutation in the document model — the markdown stays clean).
+  try { if (csuLinkifyOn) crepe.addFeature(createCsuLinkifyFeature()); } catch (e) { console.warn('[csu-linkify] feature registration failed', e); }
 
   await crepe.create();
 
@@ -1371,7 +1389,17 @@ function startGalleryRename(card, r) {
   input.addEventListener('blur', () => commit(true));
 }
 
-homeBtn.onclick = openGallery;
+homeBtn.onclick = () => {
+  // Toggle: clicking Home a second time closes the gallery instead of being a no-op.
+  if (galleryPanel && !galleryPanel.classList.contains('hidden')) closeGallery();
+  else openGallery();
+};
+const galleryCloseBtn = document.getElementById('gallery-close');
+if (galleryCloseBtn) galleryCloseBtn.onclick = () => closeGallery();
+// Click on the panel backdrop (anywhere outside a card / control) closes the overlay.
+if (galleryPanel) galleryPanel.addEventListener('mousedown', (e) => {
+  if (e.target === galleryPanel || e.target === galleryGrid) closeGallery();
+});
 if (galleryAdd) galleryAdd.onclick = async () => {
   const folder = await api.pickFolder();
   if (folder) { closeGallery(); loadRoot(folder); }

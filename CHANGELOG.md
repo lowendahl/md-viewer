@@ -3,6 +3,28 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+- **CSU / MSX / eSXP auto-linkify.** New non-destructive ProseMirror
+  decoration overlay underlines opportunity numbers (`7-XXXXXXXXX`)
+  and explicit prefixes (`TPID:`, `CSP:`, `AGR:`, `MSX:`) so a click
+  opens the corresponding MSX or eSXP record. Slug-to-GUID mapping
+  is read from a `csu_ids:` (or `msx_ids:`) frontmatter block,
+  matching Sherpa's Docsify convention. The underlying markdown is
+  never modified — saves stay clean. New setting "Auto-linkify
+  CSU/MSX/eSXP IDs" (default on); see `manual/settings.md`. Code in
+  `src/csu-linkify/`.
+
+### Fixed
+- **Folder gallery is now a true overlay.** Previously the gallery
+  panel covered the editor area but had no close button, so the only
+  way to dismiss it was to pick a folder. Now: header has an explicit
+  × close button, the Home topbar button toggles (open ↔ close),
+  clicking the backdrop closes, and Esc closes (already worked). Panel
+  also gets a soft backdrop blur and fade-in so it reads as an overlay
+  instead of a permanent screen replacement.
+
 ## [1.4.1] — 2026-05-06
 
 ### Fixed

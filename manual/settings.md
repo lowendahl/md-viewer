@@ -53,6 +53,39 @@ toast with a "Download" button that opens the URL in your browser.
 - **Anonymous telemetry** — controls the local observability
   channel. Currently nothing is sent to a server.
 
+## CSU / MSX links
+
+- **Auto-linkify CSU/MSX/eSXP IDs** — when on, MD Viewer underlines
+  these patterns and turns them into clickable links:
+
+  | Pattern              | Linked to                                                                             |
+  |----------------------|---------------------------------------------------------------------------------------|
+  | `7-XXXXXXXXX`        | MSX opportunity (auto-detected anywhere in the doc)                                   |
+  | `TPID:<num>`         | MSX account (search, or direct record if mapped via `csu_ids:`)                       |
+  | `CSP:<guid\|slug>`   | eSXP success plan (needs a `csu_ids:` entry unless the value is already a GUID)       |
+  | `AGR:<guid>`         | MSX agreement record                                                                  |
+  | `MSX:<guid>`         | Raw MSX entityrecord lookup                                                           |
+
+  The decoration is **non-destructive** — only an underline overlay is
+  added; the saved Markdown is unchanged. Disable per session in
+  Settings; persists globally.
+
+- **`csu_ids:` frontmatter** — map slugs to GUIDs at the top of any
+  doc. Sherpa's `msx_ids:` is also accepted. Use unquoted values:
+
+  ```yaml
+  ---
+  csu_ids:
+    opp 7-ABC12345: 11111111-2222-3333-4444-555555555555
+    account TPID:12345678: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+    csp acme-fy26: 99999999-8888-7777-6666-555555555555
+  ---
+  ```
+
+  Without a mapping, `7-XXX` and `TPID:<num>` fall back to MSX
+  search URLs; `CSP:`, `AGR:`, `MSX:` need either a `csu_ids:` entry
+  or a literal GUID.
+
 ## Data folders
 
 About → "Open data folder" / "Open logs folder" jump to:
