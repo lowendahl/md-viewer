@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-05-06
+
 ### Added
 - **CSU / MSX / eSXP auto-linkify.** New non-destructive ProseMirror
   decoration overlay underlines opportunity numbers (`7-XXXXXXXXX`)
