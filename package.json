@@ -1,6 +1,6 @@
 {
   "name": "md-viewer",
-  "version": "1.3.6",
+  "version": "1.4.1",
   "description": "MD Viewer - Sidemark-aware markdown collaboration surface",
   "main": "main.js",
   "scripts": {

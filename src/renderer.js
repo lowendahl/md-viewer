@@ -1,5 +1,7 @@
 // src/renderer.js — bundled with esbuild
 import './ui13.js';
+import './analytics.js';   // V1.4: usage analytics (window.MDVAnalytics)
+import './insights.js';    // V1.4: insights panel (window.MDVInsights)
 import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/core';
 import { undo as pmUndo, redo as pmRedo, undoDepth, redoDepth } from '@milkdown/kit/prose/history';
@@ -169,9 +171,20 @@ function resolveImageUrl(rel) {
   // Drop a leading "./" but preserve absolute "/abs" paths
   const cleaned = rel.replace(/^\.\//, '');
   if (/^[a-zA-Z]:[\\/]/.test(cleaned) || cleaned.startsWith('/')) {
-    return 'file:///' + cleaned.replace(/\\/g, '/').replace(/^\/+/, '');
+    return absToMdvImg(cleaned);
   }
-  return 'file:///' + _joinDocPath(currentFileDir, cleaned);
+  return absToMdvImg(_joinDocPath(currentFileDir, cleaned));
+}
+// Convert an absolute filesystem path to a mdv-img:// URL the renderer
+// can load. Chromium blocks file:// → file:// cross-origin reads from
+// the page's own file:// origin, so this custom scheme (registered in
+// main.js) is the only reliable way to display local images. URI-encode
+// each path segment so spaces / unicode survive.
+function absToMdvImg(absPath) {
+  if (!absPath) return absPath;
+  const norm = String(absPath).replace(/\\/g, '/').replace(/^\/+/, '');
+  const enc = norm.split('/').map(encodeURIComponent).join('/');
+  return 'mdv-img:///' + enc;
 }
 async function uploadImageFile(file) {
   if (!currentFile) throw new Error('No file open');
@@ -184,13 +197,13 @@ async function uploadImageFile(file) {
 // Compute a relative path from currentFileDir to absImagePath. Returns POSIX-style.
 function relativeFromDoc(absImagePath) {
   if (!absImagePath) return absImagePath;
-  if (!currentFileDir) return 'file:///' + String(absImagePath).replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!currentFileDir) return absToMdvImg(absImagePath);
   const norm = (s) => String(s).replace(/\\/g, '/').replace(/\/+$/, '');
   const fromParts = norm(currentFileDir).split('/');
   const toParts = norm(absImagePath).split('/');
-  // Drives differ on Windows → fall back to file:// absolute
+  // Drives differ on Windows → fall back to absolute mdv-img:// URL
   if (fromParts[0] && toParts[0] && fromParts[0].toLowerCase() !== toParts[0].toLowerCase()) {
-    return 'file:///' + norm(absImagePath).replace(/^\/+/, '');
+    return absToMdvImg(absImagePath);
   }
   let i = 0;
   while (i < fromParts.length && i < toParts.length - 1 && fromParts[i].toLowerCase() === toParts[i].toLowerCase()) i++;
@@ -349,11 +362,56 @@ if (FLAGS.changes) {
     const set = watchers.get(payload.path);
     if (set) for (const cb of set) { try { cb(payload); } catch {} }
     addLog(payload);
+    // V1.4: auto-refresh on external change to the currently-open file.
+    try { maybeAutoRefresh(payload); } catch (e) { console.warn('[auto-refresh] failed', e); }
   });
   api.onTreeDirty(() => {
     clearTimeout(window._treeRefresh);
     window._treeRefresh = setTimeout(refreshTree, 400);
   });
+}
+
+// ---- V1.4: auto-refresh on external change ---------------------------------
+// When the currently-open file is modified outside MD Viewer (git pull,
+// editor on another machine, OneDrive sync) and there are no unsaved local
+// changes, transparently reload it. If there ARE unsaved changes, surface a
+// non-destructive toast offering to reload.
+let _autoRefreshTimer = null;
+let _lastAutoRefreshPath = null;
+function maybeAutoRefresh(ev) {
+  if (!ev || !ev.path || !currentFile) return;
+  // Normalize for case-insensitive Windows comparison.
+  const a = String(ev.path).replace(/\\/g, '/').toLowerCase();
+  const b = String(currentFile).replace(/\\/g, '/').toLowerCase();
+  if (a !== b) return;
+  // Sidecar (.mrsf.json) writes round-trip through us — don't react.
+  if (/\.mrsf\.json$/i.test(a)) return;
+  if (ev.event !== 'change' && ev.event !== 'changed' && ev.event !== 'add') return;
+  // Debounce — chokidar can fire multiple events for one save.
+  clearTimeout(_autoRefreshTimer);
+  _autoRefreshTimer = setTimeout(async () => {
+    if (currentFile !== ev.path && currentFile.toLowerCase() !== a) return;
+    if (dirty) {
+      try {
+        const t = window.toast;
+        if (t && typeof t.warn === 'function') {
+          t.warn('File changed on disk. Save or reload to merge.');
+        } else {
+          t?.info?.('File changed on disk — you have unsaved changes.');
+        }
+      } catch {}
+      try { window.MDVAnalytics?.track('file.external-change', { dirty: true }); } catch {}
+      return;
+    }
+    if (_lastAutoRefreshPath === currentFile && Date.now() - (window._lastAutoRefreshAt || 0) < 1500) return;
+    _lastAutoRefreshPath = currentFile;
+    window._lastAutoRefreshAt = Date.now();
+    try {
+      await openFile(currentFile);
+      try { window.toast?.info?.('Reloaded from disk'); } catch {}
+      try { window.MDVAnalytics?.track('file.external-change', { dirty: false, reloaded: true }); } catch {}
+    } catch (e) { console.warn('[auto-refresh] reload failed', e); }
+  }, 250);
 }
 
 // Belt-and-braces: refresh the tree whenever the window regains focus, in case
@@ -697,14 +755,16 @@ function openLightbox(srcOrUrl, caption) {
   if (!lightboxEl || !lbImg) return;
   let url = srcOrUrl;
   if (typeof url === 'string' && !/^(https?:|data:|blob:|file:|mdv-img:)/i.test(url)) {
-    // Treat as absolute filesystem path
-    url = 'file:///' + url.replace(/\\/g, '/').replace(/^\/+/, '');
+    // Treat as absolute filesystem path → mdv-img:// (file:// is blocked
+    // for cross-origin loads in Electron when the page itself is file://).
+    url = absToMdvImg(url);
   }
   lbImg.src = url;
   if (lbCaption) lbCaption.textContent = caption || (typeof srcOrUrl === 'string' ? srcOrUrl : '');
   lightboxEl.classList.remove('hidden');
   lightboxEl.setAttribute('aria-hidden', 'false');
   setLbZoom(1, { fit: true });
+  try { window.MDVAnalytics?.track('lightbox.open'); } catch {}
 }
 function closeLightbox() {
   if (!lightboxEl) return;
@@ -769,7 +829,7 @@ function showCtxMenu(ev, ctx) {
   const items = [];
   if (ctx.type === 'image') {
     items.push({ label: 'Open (zoom)', fn: () => openLightbox(ctx.path, ctx.name) });
-    items.push({ label: 'Open in Explorer', fn: () => api.showInExplorer(ctx.path) });
+    items.push({ label: 'Open location', fn: () => api.showInExplorer(ctx.path) });
     items.push({ label: 'Rename', fn: () => startInlineRename(ctx.itemEl, ctx.path, ctx.name, false) });
     items.push({ sep: true });
     items.push({ label: 'Delete', danger: true, fn: async () => {
@@ -804,7 +864,7 @@ function showCtxMenu(ev, ctx) {
     }});
   } else {
     items.push({ label: 'Open', fn: () => openFile(ctx.path) });
-    items.push({ label: 'Open in Explorer', fn: () => api.showInExplorer(ctx.path) });
+    items.push({ label: 'Open location', fn: () => api.showInExplorer(ctx.path) });
     items.push({ label: 'Rename', fn: () => startInlineRename(ctx.itemEl, ctx.path, ctx.name, false) });
     items.push({ sep: true });
     items.push({ label: 'Delete', danger: true, fn: async () => {
@@ -961,13 +1021,28 @@ async function openFile(p) {
             .then(t => console.log('[mrsf] wrote sidecar', t, 'comments:', doc.comments?.length))
             .catch(err => console.warn('[mrsf] direct save failed', err));
         }
-        // 2) Then update UI (guarded).
-        try {
-          if (doc) {
-            updateCommentCountFromDoc(doc);
-            if (typeof renderComments === 'function') renderComments(doc, p);
+        // 2) Then update UI (guarded + freeze-guarded).
+        // V1.4: schedule re-render off the critical path so a slow comment
+        // re-layout doesn't block ProseMirror's transaction loop. Time it
+        // and report >200ms hotspots so the Insights panel can flag them.
+        const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const run = () => {
+          try {
+            if (doc) {
+              updateCommentCountFromDoc(doc);
+              if (typeof renderComments === 'function') renderComments(doc, p);
+            }
+          } catch (e) { console.warn('[mrsf] render after save failed', e); }
+          finally {
+            const dt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+            try { window.MDVAnalytics?.perfRefresh?.('mrsf.onStateChange', dt); } catch {}
           }
-        } catch (e) { console.warn('[mrsf] render after save failed', e); }
+        };
+        if (typeof window.requestIdleCallback === 'function') {
+          window.requestIdleCallback(run, { timeout: 500 });
+        } else {
+          setTimeout(run, 0);
+        }
       },
     };
     crepeOpts.featureConfigs.toolbar = createCrepeMrsfToolbarConfig(mrsfOptions);
@@ -998,6 +1073,8 @@ async function openFile(p) {
     const sc = await api.readSidecar(p);
     updateCommentCountFromDoc(sc.doc);
   }
+  // V1.4: track file open (folder hash + ext only, no full path)
+  try { window.MDVAnalytics?.fileOpen(p, /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(p) ? 'image' : 'md'); } catch {}
   // V1.3: persist last-opened file
   try { api.setLastFile({ path: p }); } catch {}
   // V1.3: clear any draft now that we've cleanly opened
@@ -2085,12 +2162,16 @@ async function refreshComments(path) {
     return;
   }
   if (!path) { renderComments(null, null); return; }
+  const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   try {
     const sc = await api.readSidecar(path);
     renderComments(sc?.doc || null, path);
   } catch (err) {
     console.warn('refreshComments failed', err);
     commentsBody.innerHTML = '<li class="empty">Error loading sidecar</li>';
+  } finally {
+    const dt = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    try { window.MDVAnalytics?.perfRefresh?.('refreshComments', dt); } catch {}
   }
 }
 

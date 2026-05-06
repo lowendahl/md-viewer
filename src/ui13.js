@@ -76,6 +76,25 @@ function applyShellPrefs(s) {
   document.body.classList.toggle('vscode-shell', s.vscodeShell !== false); // ON by default
   if (s.fontSize) document.documentElement.style.setProperty('--mdv-font-size', `${s.fontSize}px`);
   if (s.editorFontSize) document.documentElement.style.setProperty('--mdv-editor-font-size', `${s.editorFontSize}px`);
+  // V1.4: comment overlay visibility ('inline' | 'gutter-only' | 'off')
+  const co = s.commentOverlay || 'inline';
+  document.body.classList.remove('mdv-cmt-inline', 'mdv-cmt-gutter', 'mdv-cmt-off');
+  document.body.classList.add(
+    co === 'off' ? 'mdv-cmt-off' :
+    co === 'gutter-only' ? 'mdv-cmt-gutter' : 'mdv-cmt-inline'
+  );
+  // Push opt-in state into analytics module if loaded.
+  try { window.MDVAnalytics?.setOptIn?.(s.telemetryOptIn !== false); } catch {}
+}
+
+// V1.4: cycle comment overlay mode (called from 💬 topbar button)
+async function cycleCommentOverlay() {
+  const order = ['inline', 'gutter-only', 'off'];
+  const cur = (_settings && _settings.commentOverlay) || 'inline';
+  const next = order[(order.indexOf(cur) + 1) % order.length];
+  await saveSettings({ commentOverlay: next });
+  try { window.MDVAnalytics?.track('comments.toggle', { mode: next }); } catch {}
+  window.toast?.info?.('Comments: ' + next);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,14 +195,24 @@ async function openSettings() {
         <button class="btn-blue-ghost" id="settings-check-now">Check now</button>
       </div>
 
+      <h3>Comments</h3>
+      <label class="mdv-row">
+        <span>Comment overlay</span>
+        <select data-key="commentOverlay" data-type="string">
+          <option value="inline">Inline highlights + gutter</option>
+          <option value="gutter-only">Gutter markers only</option>
+          <option value="off">Off (rail only)</option>
+        </select>
+      </label>
+
       <h3>Privacy</h3>
       <label class="mdv-row">
-        <span>Anonymous telemetry</span>
+        <span>Anonymous telemetry (local only)</span>
         <input data-key="telemetryOptIn" type="checkbox" />
       </label>
       <div class="mdv-row">
         <span></span>
-        <span class="mdv-muted">Stored in <code id="settings-userdata"></code></span>
+        <span class="mdv-muted">Events written to <code id="settings-userdata"></code>. Open the 📊 Insights panel to see what's collected. Disable to stop recording immediately.</span>
       </div>
     </div>
     <div class="mdv-modal-foot">
@@ -197,6 +226,7 @@ async function openSettings() {
     const k = f.dataset.key;
     const v = s[k];
     if (f.type === 'checkbox') f.checked = !!v;
+    else if (f.tagName === 'SELECT' && f.dataset.type === 'string') f.value = v != null ? String(v) : f.value;
     else if (f.tagName === 'SELECT') f.value = String(!!v);
     else if (Array.isArray(v)) f.value = v.join(', ');
     else if (v != null) f.value = v;
@@ -216,6 +246,7 @@ async function openSettings() {
     fields.forEach((f) => {
       const k = f.dataset.key;
       if (f.type === 'checkbox') partial[k] = !!f.checked;
+      else if (f.tagName === 'SELECT' && f.dataset.type === 'string') partial[k] = f.value;
       else if (f.tagName === 'SELECT') partial[k] = f.value === 'true';
       else if (f.type === 'number') partial[k] = parseInt(f.value, 10) || 0;
       else if (k === 'ignoreGlobs') partial[k] = f.value.split(',').map((x) => x.trim()).filter(Boolean);
@@ -371,7 +402,17 @@ async function runUpdateCheck(interactive) {
   try { r = await api.checkUpdates(); }
   catch (e) { if (interactive) window.toast.error('Update check failed'); return; }
   if (!r.ok) {
-    if (interactive) window.toast.warn(r.error || 'No update manifest configured');
+    if (interactive) {
+      const raw = String(r.error || '');
+      // Sax/XML parser dumps ("Attribute without value\nLine: ...\nColumn: ...")
+      // leak when the release feed returns HTML (e.g. SAML/SSO redirect from a
+      // private GitHub repo). Surface a friendlier message instead.
+      const looksLikeParserDump = /Line:\s*\d+/.test(raw) && /Column:\s*\d+/.test(raw);
+      const msg = !raw ? 'No update manifest configured'
+        : looksLikeParserDump ? 'Update feed unreadable (release repo may be private or returning HTML)'
+        : raw;
+      window.toast.warn(msg);
+    }
     return;
   }
   if (r.newer && r.downloadUrl) {
@@ -389,6 +430,10 @@ async function runUpdateCheck(interactive) {
 // 7) Find-in-file (Ctrl+F) — lightweight DOM-based
 // ---------------------------------------------------------------------------
 function installFindBar() {
+  // V1.4: idempotent — never bind twice. The repeated installs were the
+  // proximate cause of the "find bar always opens" regression because the
+  // Ctrl+F handler kept stacking on document.
+  if (document.getElementById('find-bar')) return;
   const bar = document.createElement('div');
   bar.id = 'find-bar';
   bar.className = 'hidden';
@@ -465,12 +510,14 @@ function installFindBar() {
     clearMarks();
     document.addEventListener('keydown', onDocKey, true);
     document.addEventListener('mousedown', onDocClick, true);
+    try { window.MDVAnalytics?.track('find.open'); } catch {}
   }
   function close() {
     bar.classList.add('hidden');
     clearMarks();
     document.removeEventListener('keydown', onDocKey, true);
     document.removeEventListener('mousedown', onDocClick, true);
+    try { window.MDVAnalytics?.track('find.close'); } catch {}
   }
   function onDocKey(e) {
     if (e.key === 'Escape' && !bar.classList.contains('hidden')) {
@@ -587,14 +634,20 @@ function installTopbarButtons() {
   const saveBtn = document.getElementById('save-btn');
   const refs = [];
   refs.push(mk('print-btn', 'Print to PDF', '🖨', async () => {
+    try { window.MDVAnalytics?.track('file.print-pdf'); } catch {}
     const cf = document.getElementById('current-file')?.textContent || 'document';
     const base = cf.split(/[\\\/]/).pop().replace(/\.(md|markdown)$/i, '');
     const r = await api.printToPdf(base || 'document');
     if (r.ok) window.toast.success('Saved PDF'); else if (!r.canceled) window.toast.error(r.error || 'Print failed');
   }));
-  refs.push(mk('manual-btn', 'Manual', '📖', openManual));
-  refs.push(mk('settings-btn', 'Settings', '⚙', openSettings));
-  refs.push(mk('about-btn', 'About', 'ⓘ', openAbout));
+  refs.push(mk('comments-overlay-btn', 'Cycle comment overlay (inline → gutter → off)', '💬', cycleCommentOverlay));
+  refs.push(mk('insights-btn', 'Usage insights', '📊', () => {
+    try { window.MDVInsights?.open(); }
+    catch (e) { window.toast?.error?.('Insights failed to open'); console.warn(e); }
+  }));
+  refs.push(mk('manual-btn', 'Manual', '📖', () => { try { window.MDVAnalytics?.track('manual.open'); } catch {} openManual(); }));
+  refs.push(mk('settings-btn', 'Settings', '⚙', () => { try { window.MDVAnalytics?.track('settings.open'); } catch {} openSettings(); }));
+  refs.push(mk('about-btn', 'About', 'ⓘ', () => { try { window.MDVAnalytics?.track('about.open'); } catch {} openAbout(); }));
   refs.forEach((b) => status.insertBefore(b, saveBtn));
 }
 

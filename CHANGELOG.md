@@ -3,6 +3,56 @@
 All notable changes to MD Viewer.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.1] — 2026-05-06
+
+### Fixed
+- **Auto-update no longer spits a raw XML parser error** ("Attribute without
+  value Line: 26 Column: 76 Char: >"). The locally-built v1.4.0 had been
+  compiled from a stale base that pre-dated the v1.3.4 publish-target fix,
+  re-introducing the abandoned private EMU repo `plwendahl_microsoft/md-viewer`
+  in `app-update.yml`. GitHub returned the SAML/SSO HTML login page, which
+  builder-util-runtime's sax parser then choked on. Republished `package.json`
+  publish target as `lowendahl/md-viewer` (public), and `runUpdateCheck` now
+  detects parser-dump-style errors and shows
+  "Update feed unreadable (release repo may be private or returning HTML)"
+  instead of leaking raw sax output.
+
+## [1.4.0] — 2026-05-06
+
+### Added
+- **📊 Insights panel** (topbar) — local-only usage analytics dashboard.
+  Shows top commands, unused features, sessions per day, and slow-refresh
+  hotspots over the last 30 days. Aggregated entirely from the existing
+  `@compass/observability` NDJSON log; nothing leaves the machine.
+  Open with the 📊 button on the topbar.
+- **Comment overlay control** — Settings → Comments lets you choose
+  `Inline highlights + gutter`, `Gutter markers only`, or `Off (rail only)`.
+  The 💬 topbar button cycles through the three modes.
+- **Auto-refresh on external change** — when the open file is modified
+  outside MD Viewer (git pull, OneDrive sync, another editor), the view
+  reloads transparently if there are no unsaved changes; otherwise a
+  toast warns about the change.
+- **"Open location"** context-menu item on files, images, and folders —
+  opens Explorer at the parent (file/image) or the folder itself.
+- **Custom `mdv-img://` protocol** for local image previews — works
+  around the Chromium `file://` cross-origin block that broke image
+  preview in 1.3.x.
+
+### Fixed
+- **Find-in-file regression** — `#find-bar.hidden` now actually hides
+  the bar (id selector previously beat the `.hidden` class), and the
+  bar installer is idempotent so the Ctrl+F handler no longer stacks.
+- **Occasional freeze** during heavy comment activity — the MRSF
+  re-render is now scheduled via `requestIdleCallback` and timed; slow
+  refreshes (>200 ms) are recorded as `mdv.perf.refresh.long` events
+  so they show up in the Insights "hotspots" card.
+- **Image preview** restored (see `mdv-img://` above).
+
+### Privacy
+- Telemetry stays local. Opt-out via Settings → Privacy. When opted in,
+  events are written to the user-data folder only — paths are reduced to
+  a folder hash + extension, file content is never logged.
+
 ## [1.3.6] — 2026-05-04
 
 ### Added

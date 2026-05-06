@@ -829,6 +829,9 @@ body { display: flex; flex-direction: column; }
   z-index: 9000;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
+/* The id selector beats the .hidden class — restate the rule with id
+ * specificity so toggling the class actually hides the bar. (V1.4 fix
+ * for the "find bar always opens" regression.) */
 #find-bar.hidden { display: none; }
 #find-input {
   background: var(--surface-0); color: #e6e6e6;
@@ -999,3 +1002,69 @@ body.light .mdv-row input, body.light .mdv-row select { background: #fff; color:
 .mdv-manual-nav button:hover { background: rgba(127,127,127,0.12); }
 .mdv-manual-nav button.active { background: rgba(80,140,220,0.18); border-color: rgba(80,140,220,0.45); }
 
+
+/* ============================================================
+   V1.4 Insights panel + comment-overlay visibility
+   ============================================================ */
+.mdv-modal-wide { width: min(900px, 92vw); max-height: 86vh; }
+.mdv-modal-sub { font-size: 12px; opacity: 0.7; margin-left: 12px; }
+.ins-overlay .mdv-modal-body { overflow: auto; }
+.ins-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 4px 2px 8px;
+}
+.ins-card {
+  background: var(--mdv-panel, rgba(255,255,255,0.03));
+  border: 1px solid var(--mdv-border, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  padding: 12px 14px;
+  min-height: 140px;
+}
+.ins-card h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  opacity: 0.85;
+}
+.ins-empty { font-size: 12px; opacity: 0.6; padding: 8px 0; }
+.ins-help { font-size: 12px; opacity: 0.7; margin-bottom: 6px; }
+.ins-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.ins-bar-label { opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-bar-track { background: rgba(255,255,255,0.06); height: 8px; border-radius: 4px; overflow: hidden; }
+.ins-bar { background: var(--mdv-accent, #4ea1ff); height: 100%; }
+.ins-bar-num { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.75; }
+.ins-unused { margin: 0; padding-left: 18px; columns: 2; column-gap: 18px; font-size: 12px; }
+.ins-unused li { margin: 2px 0; opacity: 0.85; }
+.ins-spark { color: var(--mdv-accent, #4ea1ff); }
+.ins-spark-foot { display: flex; justify-content: space-between; font-size: 11px; opacity: 0.7; margin-top: 4px; }
+.ins-perf { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ins-perf th, .ins-perf td { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.ins-perf th { font-weight: 600; opacity: 0.7; }
+.ins-perf td:not(:first-child), .ins-perf th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.ins-disabled { padding: 18px; opacity: 0.85; }
+.ins-disabled h3 { margin-top: 0; }
+
+/* Comment overlay visibility (V1.4) */
+body.mdv-cmt-off .mrsf-comment-mark,
+body.mdv-cmt-off .mrsf-comment-highlight,
+body.mdv-cmt-off [data-mrsf-comment],
+body.mdv-cmt-off .mrsf-gutter,
+body.mdv-cmt-off .mrsf-gutter-marker { display: none !important; background: transparent !important; }
+
+body.mdv-cmt-gutter .mrsf-comment-mark,
+body.mdv-cmt-gutter .mrsf-comment-highlight,
+body.mdv-cmt-gutter [data-mrsf-comment] {
+  background: transparent !important;
+  box-shadow: none !important;
+  text-decoration: none !important;
+}

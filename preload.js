@@ -48,6 +48,10 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateState: (cb) => { const h = (_e, s) => cb(s); ipcRenderer.on('updates:state', h); return () => ipcRenderer.removeListener('updates:state', h); },
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   setLastFile: (info) => ipcRenderer.invoke('lastfile:set', info),
+  // V1.4 analytics
+  analyticsSnapshot: (opts) => ipcRenderer.invoke('analytics:snapshot', opts),
+  analyticsOpenLog: () => ipcRenderer.invoke('analytics:open-log'),
+  analyticsOpenLogDir: () => ipcRenderer.invoke('analytics:open-log-dir'),
 });
 
 // Feature flags surfaced from main via additionalArguments.

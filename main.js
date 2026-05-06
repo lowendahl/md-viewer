@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, crashReporter, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, crashReporter, Menu, protocol, net } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fssync = require('fs');
 const os = require('os');
+const url = require('url');
 const chokidar = require('chokidar');
 const yaml = require('js-yaml');
 const { installObservability, emit: obsEmit } = require('./observability');
@@ -15,6 +16,18 @@ crashReporter.start({
   uploadToServer: false,
   ignoreSystemCrashHandler: false,
 });
+
+// V1.4: register a custom scheme that streams arbitrary local files. The
+// renderer loads this page over file://, and Chromium blocks file:// →
+// file:// cross-origin loads (so inline images and the lightbox failed
+// to render attachments). mdv-img:// is treated as a standard scheme,
+// bypasses the file:// CORB, and is mapped 1:1 to the absolute path
+// after the //. Encoded as encodeURI so spaces survive.
+//
+// Usage from renderer:  src="mdv-img:///C:/Users/foo/bar.png"
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'mdv-img', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+]);
 
 // Disable HW accel to avoid GPU compositor crashes on scroll with the
 // heavy Crepe / ProseMirror DOM. Can be overridden with MDV_GPU=1.
@@ -212,6 +225,24 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Register the mdv-img:// handler. Must happen after app.whenReady().
+  try {
+    protocol.handle('mdv-img', async (req) => {
+      try {
+        // mdv-img:///C:/path/to/image.png  -> /C:/path/to/image.png  -> C:/path/to/image.png
+        let p = decodeURI(new URL(req.url).pathname || '');
+        if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(p)) p = p.slice(1);
+        // Reject anything that doesn't actually exist as a file
+        const st = await fs.stat(p).catch(() => null);
+        if (!st || !st.isFile()) return new Response('Not found', { status: 404 });
+        return net.fetch(url.pathToFileURL(p).toString());
+      } catch (err) {
+        return new Response('Bad request: ' + String(err?.message || err), { status: 400 });
+      }
+    });
+  } catch (err) {
+    obsEmit({ level: 'error', source: 'main', type: 'mdv-img.register.failed', message: String(err?.message || err) });
+  }
   createWindow();
   try {
     if (app.isPackaged) {
@@ -749,6 +780,7 @@ const SETTINGS_DEFAULT = {
   associatedAtInstall: false,
   showResolvedComments: false,
   treeImagesVisible: true,
+  commentOverlay: 'inline', // 'inline' | 'gutter-only' | 'off'  (V1.4)
 };
 
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
@@ -1004,4 +1036,121 @@ ipcMain.handle('lastfile:set', async (_e, info) => {
   cur.lastFile = info || null;
   await writeSettings(cur);
   return { ok: true };
+});
+
+// ============================================================================
+// V1.4: Usage analytics — aggregates events from the existing observability
+// NDJSON log (events-YYYY-MM-DD.jsonl). All processing happens locally; this
+// is the source of truth for the in-app Insights panel.
+// ============================================================================
+const { readEvents, listLogDates, logFilePath, TELEMETRY_DIR } = require('./observability');
+
+function _percentile(sortedAsc, p) {
+  if (!sortedAsc.length) return 0;
+  const idx = Math.min(sortedAsc.length - 1, Math.max(0, Math.floor((p / 100) * sortedAsc.length)));
+  return sortedAsc[idx];
+}
+
+ipcMain.handle('analytics:snapshot', async (_e, opts) => {
+  try {
+    const days = Math.max(1, Math.min(365, opts?.days || 30));
+    const settings = await readSettings();
+    if (settings.telemetryOptIn === false) {
+      return { disabled: true, reason: 'telemetryOptIn=false' };
+    }
+    // Walk the last N day files. readEvents reads one date at a time.
+    const wantDates = [];
+    const today = new Date();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today.getTime() - i * 86400000);
+      wantDates.push(d.toISOString().slice(0, 10));
+    }
+    const allDates = (await listLogDates().catch(() => [])) || [];
+    const dates = wantDates.filter(d => allDates.includes(d));
+    const cmdCounts = new Map();   // id -> count
+    const featureCounts = new Map();
+    const sessionDays = new Map(); // YYYY-MM-DD -> Set<sessionId>
+    const perfBuckets = new Map(); // label -> [durations]
+    let totalEvents = 0;
+    for (const d of dates) {
+      let evs;
+      try { evs = await readEvents({ date: d }); } catch { continue; }
+      sessionDays.set(d, sessionDays.get(d) || new Set());
+      for (const ev of evs) {
+        totalEvents++;
+        if (ev.type === 'mdv.command.invoke') {
+          const id = ev.context?.id || ev.message;
+          if (id) cmdCounts.set(id, (cmdCounts.get(id) || 0) + 1);
+        } else if (ev.type === 'mdv.feature.use') {
+          const id = ev.context?.id || ev.message;
+          if (id) featureCounts.set(id, (featureCounts.get(id) || 0) + 1);
+        } else if (ev.type === 'mdv.session.start') {
+          const sid = ev.context?.sessionId;
+          if (sid) sessionDays.get(d).add(sid);
+        } else if (ev.type === 'mdv.perf.refresh.long') {
+          const label = ev.context?.label || ev.message || 'refresh';
+          const ms = ev.context?.duration_ms;
+          if (Number.isFinite(ms)) {
+            if (!perfBuckets.has(label)) perfBuckets.set(label, []);
+            perfBuckets.get(label).push(ms);
+          }
+        }
+      }
+    }
+    // Top commands
+    const allCommands = [...cmdCounts.entries()].map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count);
+    const topCommands = allCommands.slice(0, 25);
+    // Sessions per day, oldest first
+    const sessionsPerDay = wantDates.slice().reverse().map(d => ({
+      date: d,
+      count: sessionDays.has(d) ? sessionDays.get(d).size : 0,
+    }));
+    const sessionCount = sessionsPerDay.reduce((s, r) => s + r.count, 0);
+    // Perf hotspots
+    const perfHotspots = [...perfBuckets.entries()].map(([label, arr]) => {
+      const sorted = arr.slice().sort((a, b) => a - b);
+      return {
+        label,
+        count: arr.length,
+        median: _percentile(sorted, 50),
+        p95: _percentile(sorted, 95),
+      };
+    }).sort((a, b) => b.count - a.count);
+    return {
+      disabled: false,
+      days,
+      totalEvents,
+      sessionCount,
+      topCommands,
+      allCommands,
+      featureCounts: [...featureCounts.entries()].map(([id, count]) => ({ id, count })),
+      sessionsPerDay,
+      perfHotspots,
+      logPath: logFilePath ? logFilePath() : null,
+      logDir: TELEMETRY_DIR,
+    };
+  } catch (err) {
+    return { disabled: false, error: String(err?.message || err) };
+  }
+});
+
+ipcMain.handle('analytics:open-log', async () => {
+  try {
+    const { shell } = require('electron');
+    const p = logFilePath ? logFilePath() : null;
+    if (!p) return { ok: false, error: 'no log path' };
+    const r = await shell.openPath(p);
+    return r ? { ok: false, error: r } : { ok: true };
+  } catch (err) { return { ok: false, error: String(err?.message || err) }; }
+});
+
+ipcMain.handle('analytics:open-log-dir', async () => {
+  try {
+    const { shell } = require('electron');
+    const dir = TELEMETRY_DIR;
+    if (!dir) return { ok: false, error: 'no log dir' };
+    const r = await shell.openPath(dir);
+    return r ? { ok: false, error: r } : { ok: true };
+  } catch (err) { return { ok: false, error: String(err?.message || err) }; }
 });
